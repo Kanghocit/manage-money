@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import dayjs, { Dayjs } from "dayjs";
@@ -72,6 +73,13 @@ export default function NewTransactionPage() {
               </Button>
             ))}
           </Box>
+          <Typography variant="body2" color="text.secondary">
+            Thiếu danh mục? Vào{" "}
+            <Button component={Link} href="/settings" size="small" sx={{ p: 0, minWidth: 0, verticalAlign: "baseline" }}>
+              Cài đặt → Danh mục
+            </Button>{" "}
+            để thêm mới.
+          </Typography>
           <TextField label="Ghi chú" fullWidth value={note} onChange={(e) => setNote(e.target.value)} />
           {create.isError && <Alert severity="error">{create.error.message}</Alert>}
           <Button

@@ -5,6 +5,7 @@ import { useColorScheme } from "@mui/material/styles";
 import { Button, Card, CardContent, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { apiFetch } from "@/lib/api-client";
 import { useMe } from "@/hooks/use-auth";
+import { CategoryManager } from "@/components/settings/category-manager";
 
 type Settings = { theme: string; language: string };
 
@@ -59,6 +60,11 @@ export default function SettingsPage() {
               Lưu hồ sơ
             </Button>
           </Stack>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent>
+          <CategoryManager />
         </CardContent>
       </Card>
     </Stack>

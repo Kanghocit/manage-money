@@ -20,6 +20,7 @@ import { DateCalendar } from "@mui/x-date-pickers/DateCalendar";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api-client";
 import type { ExpenseDayEntry } from "@/lib/expense-days-api";
+import { expenseEntryHasData, expenseEntryTotal, parseLineAmount } from "@/lib/expense-day-totals";
 import { formatVND } from "@/lib/format";
 import { ExpenseCalendarDay } from "@/components/expenses/expense-calendar-day";
 
@@ -36,6 +37,7 @@ function EntryDetail({
   entry: ExpenseDayEntry;
   onClose: () => void;
 }) {
+  const total = expenseEntryTotal(entry);
   return (
     <Stack spacing={2} sx={{ p: 2, pb: 3 }}>
       <Box sx={{ width: 40, height: 4, bgcolor: "divider", borderRadius: 2, mx: "auto" }} />
@@ -44,12 +46,12 @@ function EntryDetail({
         <Box component="img" src={entry.imageUrl} alt="" sx={{ width: "100%", borderRadius: 2, maxHeight: 280, objectFit: "cover" }} />
       )}
       <Typography gutterBottom>
-        Tổng: <strong>{formatVND(entry.totalAmount)}</strong> · {entry.status}
+        Tổng: <strong>{formatVND(total)}</strong> · {entry.status}
       </Typography>
       <List dense disablePadding>
         {(entry.lines ?? []).map((l, i) => (
-          <ListItem key={i} disableGutters>
-            <ListItemText primary={l.name} secondary={formatVND(l.amount)} />
+          <ListItem key={l.id ?? i} disableGutters>
+            <ListItemText primary={l.name} secondary={formatVND(parseLineAmount(l.amount))} />
           </ListItem>
         ))}
       </List>
@@ -63,9 +65,10 @@ function EntryDetail({
 export default function ExpenseCalendarPage() {
   const theme = useTheme();
   const mobile = useMediaQuery(theme.breakpoints.down("md"));
-  const [view, setView] = useState(dayjs());
-  const [selected, setSelected] = useState<ExpenseDayEntry | null>(null);
-  const { start, end } = monthRange(view);
+  /** Tháng đang xem — tách khỏi ngày được chọn để đổi tháng không nhảy focus ngày 1. */
+  const [calendarMonth, setCalendarMonth] = useState(dayjs());
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const { start, end } = monthRange(calendarMonth);
 
   const { data: entries } = useQuery({
     queryKey: ["expense-days", start, end],
@@ -78,9 +81,13 @@ export default function ExpenseCalendarPage() {
     return map;
   }, [entries]);
 
-  const withData = (entries ?? []).filter(
-    (e) => Number(e.totalAmount) > 0 || (e.lines?.length ?? 0) > 0 || e.imageUrl,
-  );
+  const { data: selectedEntry } = useQuery({
+    queryKey: ["expense-day", selectedEntryId],
+    enabled: !!selectedEntryId,
+    queryFn: () => apiFetch<ExpenseDayEntry>(`/expense-days/${selectedEntryId}`),
+  });
+
+  const withData = (entries ?? []).filter((e) => expenseEntryHasData(e));
 
   return (
     <Stack spacing={2} sx={{ maxWidth: 720, mx: "auto" }}>
@@ -89,12 +96,12 @@ export default function ExpenseCalendarPage() {
       </Typography>
       <Paper sx={{ p: { xs: 1, sm: 2 }, borderRadius: 3 }}>
         <DateCalendar
-          value={view}
-          onMonthChange={(m) => setView(m)}
+          referenceDate={calendarMonth}
+          onMonthChange={(m) => setCalendarMonth(m)}
           onChange={(d) => {
             if (!d) return;
             const entry = byDate.get(d.format("YYYY-MM-DD"));
-            if (entry) setSelected(entry);
+            if (entry) setSelectedEntryId(entry.id);
           }}
           slots={{ day: ExpenseCalendarDay }}
           slotProps={{
@@ -107,10 +114,13 @@ export default function ExpenseCalendarPage() {
           {withData.length} ngày có chi tiêu trong tháng — chạm ô trên lịch để xem chi tiết (ảnh hoặc tổng tiền).
         </Typography>
       )}
+      <Typography variant="caption" color="text.secondary">
+        Lịch chỉ hiển thị chi tiêu theo ngày (ảnh/OCR). Giao dịch thêm thủ công xem tại mục Giao dịch.
+      </Typography>
       <Drawer
         anchor="bottom"
-        open={!!selected}
-        onClose={() => setSelected(null)}
+        open={!!selectedEntryId && !!selectedEntry}
+        onClose={() => setSelectedEntryId(null)}
         slotProps={{
           paper: {
             sx: {
@@ -126,7 +136,9 @@ export default function ExpenseCalendarPage() {
           },
         }}
       >
-        {selected && <EntryDetail entry={selected} onClose={() => setSelected(null)} />}
+        {selectedEntry && (
+          <EntryDetail entry={selectedEntry} onClose={() => setSelectedEntryId(null)} />
+        )}
       </Drawer>
     </Stack>
   );

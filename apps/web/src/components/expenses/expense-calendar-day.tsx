@@ -3,25 +3,19 @@
 import { PickerDay, PickerDayProps } from "@mui/x-date-pickers/PickerDay";
 import { Avatar, Box, Typography } from "@mui/material";
 import type { ExpenseDayEntry } from "@/lib/expense-days-api";
+import { expenseEntryHasData, expenseEntryTotal } from "@/lib/expense-day-totals";
 import { formatShortVND } from "@/lib/format";
 
 export type ExpenseCalendarDayProps = PickerDayProps & {
   expenseEntries?: Map<string, ExpenseDayEntry>;
 };
 
-function hasExpenseData(entry?: ExpenseDayEntry): boolean {
-  if (!entry) return false;
-  const total = Number(entry.totalAmount) || 0;
-  const lineCount = entry.lines?.length ?? 0;
-  return total > 0 || lineCount > 0 || !!entry.imageUrl || entry.status !== "draft";
-}
-
 export function ExpenseCalendarDay(props: ExpenseCalendarDayProps) {
   const { expenseEntries, day, outsideCurrentMonth, today, selected, ...other } = props;
   const dateKey = day.format("YYYY-MM-DD");
   const entry = expenseEntries?.get(dateKey);
   const imageUrl = entry?.imageUrl;
-  const showExpense = hasExpenseData(entry) && !outsideCurrentMonth;
+  const showExpense = !!entry && expenseEntryHasData(entry) && !outsideCurrentMonth;
   const dayNum = day.date();
 
   const ring =
@@ -61,7 +55,7 @@ export function ExpenseCalendarDay(props: ExpenseCalendarDayProps) {
 
   if (showExpense && entry) {
     const lineCount = entry.lines?.length ?? 0;
-    const totalLabel = formatShortVND(entry.totalAmount).replace(" đ", "");
+    const totalLabel = formatShortVND(expenseEntryTotal(entry)).replace(" đ", "");
     return (
       <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
         <PickerDay

@@ -26,6 +26,7 @@ import {
   type ExpenseDayEntry,
   type ExpenseDayLine,
 } from "@/lib/expense-days-api";
+import { expenseEntryTotal } from "@/lib/expense-day-totals";
 import { formatVND } from "@/lib/format";
 import { MoneyInput } from "@/components/money-input";
 
@@ -76,7 +77,10 @@ export default function ExpenseDailyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lines }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["expense-day", entryId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["expense-day", entryId] });
+      qc.invalidateQueries({ queryKey: ["expense-days"] });
+    },
   });
 
   const confirm = useMutation({
@@ -86,7 +90,10 @@ export default function ExpenseDailyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["expense-day", entryId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["expense-day", entryId] });
+      qc.invalidateQueries({ queryKey: ["expense-days"] });
+    },
   });
 
   return (
@@ -184,7 +191,7 @@ export default function ExpenseDailyPage() {
               </LoadingButton>
             </Stack>
             <Typography variant="body2" sx={{ mt: 1 }}>
-              Tổng: {formatVND(entry?.totalAmount ?? 0)}
+              Tổng: {formatVND(entry ? expenseEntryTotal(entry) : 0)}
             </Typography>
           </Paper>
         )}

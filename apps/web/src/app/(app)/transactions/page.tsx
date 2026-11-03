@@ -9,11 +9,7 @@ import {
   Button,
   Card,
   CardContent,
-  FormControl,
   IconButton,
-  InputLabel,
-  MenuItem,
-  Select,
   Stack,
   TextField,
   ToggleButton,
@@ -27,8 +23,6 @@ import { apiFetch } from "@/lib/api-client";
 import { formatVND } from "@/lib/format";
 import { TransactionEditDialog, type TxEdit } from "@/components/transactions/transaction-edit-dialog";
 
-type Category = { id: string; name: string; type: string };
-
 type Tx = TxEdit & {
   category?: { name: string; id?: string };
 };
@@ -38,26 +32,17 @@ export default function TransactionsPage() {
   const [q, setQ] = useState("");
   const [monthValue, setMonthValue] = useState<Dayjs | null>(null);
   const [typeFilter, setTypeFilter] = useState<"" | "expense" | "income">("");
-  const [categoryFilter, setCategoryFilter] = useState("");
   const [editTx, setEditTx] = useState<Tx | null>(null);
 
   const month = useMemo(() => (monthValue ? monthValue.format("YYYY-MM") : ""), [monthValue]);
 
-  const { data: categories } = useQuery({
-    queryKey: ["categories"],
-    queryFn: () => apiFetch<Category[]>("/categories"),
-  });
-
-  const categoryOptions = (categories ?? []).filter((c) => !typeFilter || c.type === typeFilter);
-
   const { data } = useQuery({
-    queryKey: ["transactions", q, month, typeFilter, categoryFilter],
+    queryKey: ["transactions", q, month, typeFilter],
     queryFn: () => {
       const params = new URLSearchParams();
       if (q) params.set("q", q);
       if (month) params.set("month", month);
       if (typeFilter) params.set("type", typeFilter);
-      if (categoryFilter) params.set("category", categoryFilter);
       return apiFetch<{ items: Tx[]; total: number }>(`/transactions?${params}`);
     },
   });
@@ -90,10 +75,7 @@ export default function TransactionsPage() {
         <ToggleButtonGroup
           exclusive
           value={typeFilter}
-          onChange={(_, v) => {
-            setTypeFilter(v ?? "");
-            setCategoryFilter("");
-          }}
+          onChange={(_, v) => setTypeFilter(v ?? "")}
           size="small"
         >
           <ToggleButton value="">Tất cả</ToggleButton>
@@ -102,21 +84,6 @@ export default function TransactionsPage() {
         </ToggleButtonGroup>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
           <TextField label="Tìm kiếm" value={q} onChange={(e) => setQ(e.target.value)} fullWidth />
-          <FormControl fullWidth size="small">
-            <InputLabel>Danh mục</InputLabel>
-            <Select
-              label="Danh mục"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-            >
-              <MenuItem value="">Tất cả</MenuItem>
-              {categoryOptions.map((c) => (
-                <MenuItem key={c.id} value={c.id}>
-                  {c.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
           <DatePicker
             label="Tháng"
             views={["year", "month"]}

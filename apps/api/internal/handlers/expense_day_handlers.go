@@ -182,6 +182,18 @@ func (h *Handler) expenseDayDTO(e models.ExpenseDayEntry) gin.H {
 	if e.ImageStorageKey != "" {
 		imageURL = "/api/v1/media/" + url.PathEscape(e.ImageStorageKey)
 	}
+	lineDTOs := make([]gin.H, 0, len(e.Lines))
+	for _, l := range e.Lines {
+		lineDTOs = append(lineDTOs, gin.H{
+			"id":            l.ID,
+			"name":          l.Name,
+			"amount":        l.Amount.StringFixed(0),
+			"categoryId":    l.CategoryID,
+			"transactionId": l.TransactionID,
+			"sortOrder":     l.SortOrder,
+			"confidence":    l.Confidence,
+		})
+	}
 	return gin.H{
 		"id":              e.ID,
 		"entryDate":       e.EntryDate.Format("2006-01-02"),
@@ -191,7 +203,7 @@ func (h *Handler) expenseDayDTO(e models.ExpenseDayEntry) gin.H {
 		"imageStorageKey": e.ImageStorageKey,
 		"imageUrl":        imageURL,
 		"totalAmount":     e.TotalAmount.StringFixed(0),
-		"lines":           e.Lines,
+		"lines":           lineDTOs,
 		"createdAt":       e.CreatedAt,
 		"updatedAt":       e.UpdatedAt,
 	}

@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Box, Button, Card, CardContent, LinearProgress, Stack, TextField, Typography } from "@mui/material";
 import { apiFetch } from "@/lib/api-client";
 import { formatVND } from "@/lib/format";
+import { MoneyInput } from "@/components/money-input";
+import { digitsOnly } from "@/lib/money-input";
 import { useState } from "react";
 
 type Category = { id: string; name: string; type: string };
@@ -35,7 +37,7 @@ export default function BudgetPage() {
         body: JSON.stringify({
           lines: expenseCats.map((c) => ({
             categoryId: c.id,
-            limitAmount: limits[c.id] ?? "0",
+            limitAmount: digitsOnly(limits[c.id] ?? "") || "0",
           })),
         }),
       }),
@@ -83,7 +85,12 @@ export default function BudgetPage() {
           {expenseCats.map((c) => (
             <Stack direction="row" spacing={2} sx={{ alignItems: "center", mb: 1 }} key={c.id}>
               <Typography sx={{ width: 100 }}>{c.name}</Typography>
-              <TextField size="small" onChange={(e) => setLimits((s) => ({ ...s, [c.id]: e.target.value }))} />
+              <MoneyInput
+                size="small"
+                sx={{ flex: 1 }}
+                value={limits[c.id] ?? ""}
+                onValueChange={(digits) => setLimits((s) => ({ ...s, [c.id]: digits }))}
+              />
             </Stack>
           ))}
           <Button variant="contained" onClick={() => save.mutate()} disabled={save.isPending}>

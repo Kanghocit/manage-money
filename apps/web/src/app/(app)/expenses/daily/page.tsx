@@ -27,6 +27,7 @@ import {
   type ExpenseDayLine,
 } from "@/lib/expense-days-api";
 import { formatVND } from "@/lib/format";
+import { MoneyInput } from "@/components/money-input";
 
 export default function ExpenseDailyPage() {
   const qc = useQueryClient();
@@ -154,12 +155,13 @@ export default function ExpenseDailyPage() {
                       />
                     </TableCell>
                     <TableCell>
-                      <TextField
+                      <MoneyInput
                         size="small"
-                        value={line.amount}
-                        onChange={(e) => {
+                        fullWidth
+                        value={line.amount.replace(/\D/g, "")}
+                        onValueChange={(digits) => {
                           const next = [...lines];
-                          next[i] = { ...line, amount: e.target.value };
+                          next[i] = { ...line, amount: digits };
                           setLines(next);
                         }}
                       />

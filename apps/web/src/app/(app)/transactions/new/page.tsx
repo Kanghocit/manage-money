@@ -3,8 +3,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import dayjs, { Dayjs } from "dayjs";
 import { Alert, Box, Button, Card, CardContent, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { apiFetch } from "@/lib/api-client";
+import { hasPositiveAmount } from "@/lib/money-input";
+import { MoneyInput } from "@/components/money-input";
 
 type Category = { id: string; name: string; type: string };
 
@@ -15,6 +19,7 @@ export default function NewTransactionPage() {
   const [amount, setAmount] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [note, setNote] = useState("");
+  const [occurredAt, setOccurredAt] = useState<Dayjs>(dayjs());
 
   const { data: categories } = useQuery({
     queryKey: ["categories"],
@@ -30,7 +35,7 @@ export default function NewTransactionPage() {
           amount,
           categoryId,
           note,
-          occurredAt: new Date().toISOString(),
+          occurredAt: occurredAt.startOf("day").toISOString(),
         }),
       }),
     onSuccess: () => {
@@ -53,7 +58,13 @@ export default function NewTransactionPage() {
             <ToggleButton value="expense">Chi tiêu</ToggleButton>
             <ToggleButton value="income">Thu nhập</ToggleButton>
           </ToggleButtonGroup>
-          <TextField label="Số tiền" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <MoneyInput label="Số tiền" fullWidth value={amount} onValueChange={setAmount} />
+          <DatePicker
+            label="Ngày giao dịch"
+            value={occurredAt}
+            onChange={(d) => d && setOccurredAt(d)}
+            slotProps={{ textField: { fullWidth: true } }}
+          />
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
             {filtered.map((c) => (
               <Button key={c.id} variant={categoryId === c.id ? "contained" : "outlined"} size="small" onClick={() => setCategoryId(c.id)}>
@@ -61,9 +72,13 @@ export default function NewTransactionPage() {
               </Button>
             ))}
           </Box>
-          <TextField label="Ghi chú" value={note} onChange={(e) => setNote(e.target.value)} />
+          <TextField label="Ghi chú" fullWidth value={note} onChange={(e) => setNote(e.target.value)} />
           {create.isError && <Alert severity="error">{create.error.message}</Alert>}
-          <Button variant="contained" disabled={!amount || !categoryId || create.isPending} onClick={() => create.mutate()}>
+          <Button
+            variant="contained"
+            disabled={!hasPositiveAmount(amount) || !categoryId || create.isPending}
+            onClick={() => create.mutate()}
+          >
             Lưu
           </Button>
         </Stack>

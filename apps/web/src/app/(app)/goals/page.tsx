@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Box, Button, Card, CardContent, Grid, LinearProgress, Stack, TextField, Typography } from "@mui/material";
 import { apiFetch } from "@/lib/api-client";
 import { formatVND } from "@/lib/format";
+import { MoneyInput } from "@/components/money-input";
+import { hasPositiveAmount } from "@/lib/money-input";
 import { useState } from "react";
 
 type Goal = { id: string; name: string; targetAmount: string; currentAmount: string };
@@ -60,8 +62,8 @@ export default function GoalsPage() {
           </Typography>
           <Stack spacing={2}>
             <TextField label="Tên" value={name} onChange={(e) => setName(e.target.value)} />
-            <TextField label="Số tiền mục tiêu" value={target} onChange={(e) => setTarget(e.target.value)} />
-            <Button variant="contained" disabled={!name || !target} onClick={() => create.mutate()}>
+            <MoneyInput label="Số tiền mục tiêu" fullWidth value={target} onValueChange={setTarget} />
+            <Button variant="contained" disabled={!name || !hasPositiveAmount(target)} onClick={() => create.mutate()}>
               Tạo
             </Button>
           </Stack>

@@ -78,7 +78,9 @@ export default function ExpenseCalendarPage() {
     return map;
   }, [entries]);
 
-  const withPhotos = (entries ?? []).filter((e) => e.imageUrl);
+  const withData = (entries ?? []).filter(
+    (e) => Number(e.totalAmount) > 0 || (e.lines?.length ?? 0) > 0 || e.imageUrl,
+  );
 
   return (
     <Stack spacing={2} sx={{ maxWidth: 720, mx: "auto" }}>
@@ -100,9 +102,9 @@ export default function ExpenseCalendarPage() {
           }}
         />
       </Paper>
-      {withPhotos.length > 0 && (
+      {withData.length > 0 && (
         <Typography variant="body2" color="text.secondary">
-          {withPhotos.length} ngày có ảnh trong tháng — chạm ô trên lịch để xem chi tiết.
+          {withData.length} ngày có chi tiêu trong tháng — chạm ô trên lịch để xem chi tiết (ảnh hoặc tổng tiền).
         </Typography>
       )}
       <Drawer

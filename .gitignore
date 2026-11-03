@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+apps/api/.env
+deploy/.env
+uploads/
+apps/api/uploads/
+node_modules/
+.next/
+dist/
+*.log
+.DS_Store
+coverage/
+test-results/
+playwright-report/

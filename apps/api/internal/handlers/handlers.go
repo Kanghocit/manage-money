@@ -69,6 +69,7 @@ func (h *Handler) RegisterRoutes(r *gin.Engine) {
 		protected.GET("/auth/me", h.Me)
 		protected.GET("/dashboard/summary", h.DashboardSummary)
 		protected.GET("/transactions", h.ListTransactions)
+		protected.GET("/transactions/daily", h.ListTransactionsDaily)
 		protected.POST("/transactions", h.CreateTransaction)
 		protected.GET("/transactions/:id", h.GetTransaction)
 		protected.PATCH("/transactions/:id", h.UpdateTransaction)
@@ -110,6 +111,7 @@ func (h *Handler) setAuthCookies(c *gin.Context, pair *auth.TokenPair) {
 }
 
 func (h *Handler) clearAuthCookies(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(auth.CookieAccess, "", -1, "/", "", h.cfg.CookieSecure, true)
 	c.SetCookie(auth.CookieRefresh, "", -1, "/", "", h.cfg.CookieSecure, true)
 }
@@ -244,8 +246,15 @@ func (h *Handler) DashboardSummary(c *gin.Context) {
 func (h *Handler) ListTransactions(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	dateFrom := c.Query("from")
+	dateTo := c.Query("to")
+	if dateFrom == "" && c.Query("date") != "" {
+		dateFrom = c.Query("date")
+		dateTo = c.Query("date")
+	}
 	items, total, err := h.txSvc.List(userID(c), services.ListTransactionsFilter{
-		Month: c.Query("month"), Category: c.Query("category"), Type: c.Query("type"),
+		Month: c.Query("month"), DateFrom: dateFrom, DateTo: dateTo,
+		Category: c.Query("category"), Type: c.Query("type"),
 		Query: c.Query("q"), Page: page, PageSize: pageSize,
 	})
 	if err != nil {
@@ -253,6 +262,29 @@ func (h *Handler) ListTransactions(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"items": items, "total": total, "page": page, "pageSize": pageSize})
+}
+
+func (h *Handler) ListTransactionsDaily(c *gin.Context) {
+	from := c.Query("from")
+	to := c.Query("to")
+	if from == "" || to == "" {
+		response.Fail(c, http.StatusBadRequest, "VALIDATION", "from và to bắt buộc (YYYY-MM-DD)")
+		return
+	}
+	rows, err := h.txSvc.DailyExpenseTotals(userID(c), from, to)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "VALIDATION", err.Error())
+		return
+	}
+	out := make([]gin.H, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, gin.H{
+			"date":  r.Date,
+			"total": r.Total.StringFixed(0),
+			"count": r.Count,
+		})
+	}
+	response.OK(c, out)
 }
 
 type txReq struct {

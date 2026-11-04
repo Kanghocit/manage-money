@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -87,6 +88,9 @@ func (s *ExpenseDayService) UploadImage(userID, id uuid.UUID, r io.Reader, size 
 	if err != nil {
 		return entry, err
 	}
+	if entry.Status == models.ExpenseDayProcessing {
+		return entry, nil
+	}
 	ext := ".jpg"
 	switch mime {
 	case "image/png":
@@ -105,7 +109,7 @@ func (s *ExpenseDayService) UploadImage(userID, id uuid.UUID, r io.Reader, size 
 	if err := s.db.Save(&entry).Error; err != nil {
 		return entry, err
 	}
-	if s.enqueue != nil {
+	if s.enqueue != nil && entry.Status == models.ExpenseDayProcessing {
 		_ = s.enqueue.OCRExpenseDay(entry.ID)
 	}
 	return entry, nil
@@ -119,24 +123,65 @@ type LineInput struct {
 	Confidence *float64
 }
 
+func (s *ExpenseDayService) defaultCategoryID(tx *gorm.DB) uuid.UUID {
+	var cat models.Category
+	if err := tx.Where("is_system = ? AND name = ?", true, "Khác").First(&cat).Error; err == nil {
+		return cat.ID
+	}
+	return uuid.Nil
+}
+
 func (s *ExpenseDayService) UpdateLines(userID, id uuid.UUID, lines []LineInput) (models.ExpenseDayEntry, error) {
 	entry, err := s.Get(userID, id)
 	if err != nil {
 		return entry, err
 	}
+	oldLines := entry.Lines
+	occurredAt := entry.EntryDate.Add(12 * time.Hour).UTC()
+
 	err = s.db.Transaction(func(tx *gorm.DB) error {
+		for _, ol := range oldLines {
+			if ol.TransactionID != nil {
+				if err := tx.Where("user_id = ? AND id = ?", userID, *ol.TransactionID).Delete(&models.Transaction{}).Error; err != nil {
+					return err
+				}
+			}
+		}
 		if err := tx.Where("entry_id = ?", id).Delete(&models.ExpenseDayLineItem{}).Error; err != nil {
 			return err
 		}
+		defaultCat := s.defaultCategoryID(tx)
 		total := decimal.Zero
 		for i, l := range lines {
-			line := models.ExpenseDayLineItem{
-				EntryID:    id,
-				Name:       l.Name,
+			if strings.TrimSpace(l.Name) == "" || l.Amount.LessThanOrEqual(decimal.Zero) {
+				continue
+			}
+			catID := defaultCat
+			if l.CategoryID != nil && *l.CategoryID != uuid.Nil {
+				catID = *l.CategoryID
+			}
+			if catID == uuid.Nil {
+				return errors.New("missing default category")
+			}
+			txn := models.Transaction{
+				UserID:     userID,
+				CategoryID: catID,
 				Amount:     l.Amount,
-				CategoryID: l.CategoryID,
-				SortOrder:  l.SortOrder,
-				Confidence: l.Confidence,
+				Type:       models.TransactionExpense,
+				Note:       l.Name,
+				OccurredAt: occurredAt,
+			}
+			if err := tx.Create(&txn).Error; err != nil {
+				return err
+			}
+			line := models.ExpenseDayLineItem{
+				EntryID:       id,
+				Name:          l.Name,
+				Amount:        l.Amount,
+				CategoryID:    l.CategoryID,
+				SortOrder:     l.SortOrder,
+				Confidence:    l.Confidence,
+				TransactionID: &txn.ID,
 			}
 			if line.SortOrder == 0 {
 				line.SortOrder = i
@@ -146,8 +191,8 @@ func (s *ExpenseDayService) UpdateLines(userID, id uuid.UUID, lines []LineInput)
 			}
 			total = total.Add(l.Amount)
 		}
-		status := entry.Status
-		if status == models.ExpenseDayReady || status == models.ExpenseDayDraft {
+		status := models.ExpenseDayConfirmed
+		if len(lines) == 0 || total.IsZero() {
 			status = models.ExpenseDayReady
 		}
 		return tx.Model(&entry).Updates(map[string]any{
@@ -157,6 +202,9 @@ func (s *ExpenseDayService) UpdateLines(userID, id uuid.UUID, lines []LineInput)
 	})
 	if err != nil {
 		return entry, err
+	}
+	if s.txSvc != nil {
+		s.txSvc.ScheduleJobs(userID, occurredAt)
 	}
 	return s.Get(userID, id)
 }
@@ -212,6 +260,9 @@ func (s *ExpenseDayService) RunOCR(entryID uuid.UUID) error {
 	var entry models.ExpenseDayEntry
 	if err := s.db.First(&entry, "id = ?", entryID).Error; err != nil {
 		return err
+	}
+	if entry.Status != models.ExpenseDayProcessing {
+		return nil
 	}
 	if entry.ImageStorageKey == "" {
 		return errors.New("no image")

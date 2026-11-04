@@ -3,19 +3,28 @@
 import { PickerDay, PickerDayProps } from "@mui/x-date-pickers/PickerDay";
 import { Avatar, Box, Typography } from "@mui/material";
 import type { ExpenseDayEntry } from "@/lib/expense-days-api";
-import { expenseEntryHasData, expenseEntryTotal } from "@/lib/expense-day-totals";
 import { formatShortVND } from "@/lib/format";
+
+export type DailySpend = { date: string; total: string; count: number };
 
 export type ExpenseCalendarDayProps = PickerDayProps & {
   expenseEntries?: Map<string, ExpenseDayEntry>;
+  dailyTotals?: Map<string, DailySpend>;
 };
 
+function daySpend(dateKey: string, dailyTotals?: Map<string, DailySpend>): number {
+  const row = dailyTotals?.get(dateKey);
+  if (!row) return 0;
+  return Number(String(row.total).replace(/\D/g, "")) || 0;
+}
+
 export function ExpenseCalendarDay(props: ExpenseCalendarDayProps) {
-  const { expenseEntries, day, outsideCurrentMonth, today, selected, ...other } = props;
+  const { expenseEntries, dailyTotals, day, outsideCurrentMonth, today, selected, ...other } = props;
   const dateKey = day.format("YYYY-MM-DD");
   const entry = expenseEntries?.get(dateKey);
   const imageUrl = entry?.imageUrl;
-  const showExpense = !!entry && expenseEntryHasData(entry) && !outsideCurrentMonth;
+  const spend = daySpend(dateKey, dailyTotals);
+  const showExpense = !outsideCurrentMonth && (spend > 0 || !!imageUrl);
   const dayNum = day.date();
 
   const ring =
@@ -53,9 +62,9 @@ export function ExpenseCalendarDay(props: ExpenseCalendarDayProps) {
     );
   }
 
-  if (showExpense && entry) {
-    const lineCount = entry.lines?.length ?? 0;
-    const totalLabel = formatShortVND(expenseEntryTotal(entry)).replace(" đ", "");
+  if (showExpense && spend > 0) {
+    const count = dailyTotals?.get(dateKey)?.count ?? 0;
+    const totalLabel = formatShortVND(spend).replace(" đ", "");
     return (
       <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
         <PickerDay
@@ -84,9 +93,9 @@ export function ExpenseCalendarDay(props: ExpenseCalendarDayProps) {
           <Typography variant="caption" sx={{ fontSize: "0.55rem", fontWeight: 600, color: "primary.main", lineHeight: 1.1 }}>
             {totalLabel}
           </Typography>
-          {lineCount > 0 && (
+          {count > 1 && (
             <Typography variant="caption" sx={{ fontSize: "0.5rem", color: "text.secondary", lineHeight: 1 }}>
-              ({lineCount})
+              ({count})
             </Typography>
           )}
         </PickerDay>

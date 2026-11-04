@@ -43,9 +43,7 @@ func (s *OCRService) ParseReceipt(r io.Reader, mime string) (OCRResult, error) {
 }
 
 func mockOCRResult() OCRResult {
-	return OCRResult{Items: []OCRLineItem{
-		{Name: "Mục mẫu (cấu hình OPENAI_API_KEY để OCR thật)", Amount: "50000", Confidence: 0.5},
-	}}
+	return OCRResult{Items: []OCRLineItem{}}
 }
 
 func (s *OCRService) parseOpenAI(image []byte, mime string) (OCRResult, error) {

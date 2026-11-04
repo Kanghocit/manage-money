@@ -22,6 +22,8 @@ func NewTransactionService(db *gorm.DB, enqueue *jobs.Enqueuer) *TransactionServ
 
 type ListTransactionsFilter struct {
 	Month    string
+	DateFrom string
+	DateTo   string
 	Category string
 	Type     string
 	Query    string
@@ -39,7 +41,14 @@ func (s *TransactionService) List(userID uuid.UUID, f ListTransactionsFilter) ([
 			q = q.Where("category_id = ?", catID)
 		}
 	}
-	if f.Month != "" {
+	if f.DateFrom != "" && f.DateTo != "" {
+		if from, err := time.Parse("2006-01-02", f.DateFrom); err == nil {
+			if to, err := time.Parse("2006-01-02", f.DateTo); err == nil {
+				end := to.Add(24 * time.Hour)
+				q = q.Where("occurred_at >= ? AND occurred_at < ?", from.UTC(), end.UTC())
+			}
+		}
+	} else if f.Month != "" {
 		if t, err := time.Parse("2006-01", f.Month); err == nil {
 			start, end := monthBounds(t.Year(), int(t.Month()))
 			q = q.Where("occurred_at >= ? AND occurred_at < ?", start, end)
@@ -155,6 +164,33 @@ func (s *TransactionService) Recent(userID uuid.UUID, limit int) ([]models.Trans
 	var items []models.Transaction
 	err := s.db.Preload("Category").Where("user_id = ?", userID).Order("occurred_at DESC").Limit(limit).Find(&items).Error
 	return items, err
+}
+
+type DailyExpenseRow struct {
+	Date  string          `json:"date"`
+	Total decimal.Decimal `json:"total"`
+	Count int64           `json:"count"`
+}
+
+func (s *TransactionService) DailyExpenseTotals(userID uuid.UUID, fromStr, toStr string) ([]DailyExpenseRow, error) {
+	from, err := time.Parse("2006-01-02", fromStr)
+	if err != nil {
+		return nil, err
+	}
+	to, err := time.Parse("2006-01-02", toStr)
+	if err != nil {
+		return nil, err
+	}
+	endExclusive := to.Add(24 * time.Hour).UTC()
+	fromUTC := from.UTC()
+	var rows []DailyExpenseRow
+	err = s.db.Model(&models.Transaction{}).
+		Select(`TO_CHAR((occurred_at AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') as date, COALESCE(SUM(amount), 0) as total, COUNT(*) as count`).
+		Where("user_id = ? AND type = ? AND occurred_at >= ? AND occurred_at < ?", userID, models.TransactionExpense, fromUTC, endExclusive).
+		Group("DATE(occurred_at AT TIME ZONE 'UTC')").
+		Order("date ASC").
+		Scan(&rows).Error
+	return rows, err
 }
 
 var ErrNotFound = errors.New("not found")

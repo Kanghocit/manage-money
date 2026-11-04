@@ -20,9 +20,8 @@ import { DateCalendar } from "@mui/x-date-pickers/DateCalendar";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api-client";
 import type { ExpenseDayEntry } from "@/lib/expense-days-api";
-import { expenseEntryHasData, expenseEntryTotal, parseLineAmount } from "@/lib/expense-day-totals";
 import { formatVND } from "@/lib/format";
-import { ExpenseCalendarDay } from "@/components/expenses/expense-calendar-day";
+import { ExpenseCalendarDay, type DailySpend } from "@/components/expenses/expense-calendar-day";
 
 function monthRange(view: Dayjs) {
   const start = view.startOf("month").format("YYYY-MM-DD");
@@ -30,33 +29,49 @@ function monthRange(view: Dayjs) {
   return { start, end };
 }
 
-function EntryDetail({
-  entry,
+type TxRow = {
+  id: string;
+  amount: string;
+  note: string;
+  type: string;
+  category?: { name: string };
+};
+
+function DayDetail({
+  date,
+  imageUrl,
+  transactions,
+  total,
   onClose,
 }: {
-  entry: ExpenseDayEntry;
+  date: string;
+  imageUrl?: string;
+  transactions: TxRow[];
+  total: number;
   onClose: () => void;
 }) {
-  const total = expenseEntryTotal(entry);
   return (
     <Stack spacing={2} sx={{ p: 2, pb: 3 }}>
       <Box sx={{ width: 40, height: 4, bgcolor: "divider", borderRadius: 2, mx: "auto" }} />
-      <Typography variant="h6">{entry.entryDate} — chi tiêu</Typography>
-      {entry.imageUrl && (
-        <Box component="img" src={entry.imageUrl} alt="" sx={{ width: "100%", borderRadius: 2, maxHeight: 280, objectFit: "cover" }} />
+      <Typography variant="h6">{date} — chi tiêu</Typography>
+      {imageUrl && (
+        <Box component="img" src={imageUrl} alt="" sx={{ width: "100%", borderRadius: 2, maxHeight: 280, objectFit: "cover" }} />
       )}
       <Typography gutterBottom>
-        Tổng: <strong>{formatVND(total)}</strong> · {entry.status}
+        Tổng: <strong>{formatVND(total)}</strong> · {transactions.length} giao dịch
       </Typography>
       <List dense disablePadding>
-        {(entry.lines ?? []).map((l, i) => (
-          <ListItem key={l.id ?? i} disableGutters>
-            <ListItemText primary={l.name} secondary={formatVND(parseLineAmount(l.amount))} />
+        {transactions.map((tx) => (
+          <ListItem key={tx.id} disableGutters>
+            <ListItemText
+              primary={tx.note || tx.category?.name || "Chi tiêu"}
+              secondary={`${tx.category?.name ?? ""} · ${formatVND(tx.amount)}`}
+            />
           </ListItem>
         ))}
       </List>
       <Button component={Link} href="/expenses/daily" variant="contained" onClick={onClose}>
-        Chỉnh sửa ngày này
+        Chụp / chỉnh sửa ngày này
       </Button>
     </Stack>
   );
@@ -65,14 +80,18 @@ function EntryDetail({
 export default function ExpenseCalendarPage() {
   const theme = useTheme();
   const mobile = useMediaQuery(theme.breakpoints.down("md"));
-  /** Tháng đang xem — tách khỏi ngày được chọn để đổi tháng không nhảy focus ngày 1. */
   const [calendarMonth, setCalendarMonth] = useState(dayjs());
-  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const { start, end } = monthRange(calendarMonth);
 
   const { data: entries } = useQuery({
     queryKey: ["expense-days", start, end],
     queryFn: () => apiFetch<ExpenseDayEntry[]>(`/expense-days?from=${start}&to=${end}`),
+  });
+
+  const { data: dailyTotals } = useQuery({
+    queryKey: ["transactions-daily", start, end],
+    queryFn: () => apiFetch<DailySpend[]>(`/transactions/daily?from=${start}&to=${end}`),
   });
 
   const byDate = useMemo(() => {
@@ -81,13 +100,32 @@ export default function ExpenseCalendarPage() {
     return map;
   }, [entries]);
 
-  const { data: selectedEntry } = useQuery({
-    queryKey: ["expense-day", selectedEntryId],
-    enabled: !!selectedEntryId,
-    queryFn: () => apiFetch<ExpenseDayEntry>(`/expense-days/${selectedEntryId}`),
+  const totalsByDate = useMemo(() => {
+    const map = new Map<string, DailySpend>();
+    (dailyTotals ?? []).forEach((d) => map.set(d.date, d));
+    return map;
+  }, [dailyTotals]);
+
+  const { data: dayTx } = useQuery({
+    queryKey: ["transactions", "day", selectedDate],
+    enabled: !!selectedDate,
+    queryFn: () =>
+      apiFetch<{ items: TxRow[] }>(
+        `/transactions?date=${selectedDate}&type=expense&pageSize=100`,
+      ),
   });
 
-  const withData = (entries ?? []).filter((e) => expenseEntryHasData(e));
+  const daysWithSpend = (dailyTotals ?? []).filter((d) => Number(d.total) > 0).length;
+
+  const openDay = (dateKey: string) => {
+    const spend = Number(totalsByDate.get(dateKey)?.total ?? 0);
+    const hasImage = !!byDate.get(dateKey)?.imageUrl;
+    if (spend > 0 || hasImage) setSelectedDate(dateKey);
+  };
+
+  const selectedTotal = selectedDate
+    ? Number(totalsByDate.get(selectedDate)?.total ?? 0)
+    : 0;
 
   return (
     <Stack spacing={2} sx={{ maxWidth: 720, mx: "auto" }}>
@@ -100,27 +138,23 @@ export default function ExpenseCalendarPage() {
           onMonthChange={(m) => setCalendarMonth(m)}
           onChange={(d) => {
             if (!d) return;
-            const entry = byDate.get(d.format("YYYY-MM-DD"));
-            if (entry) setSelectedEntryId(entry.id);
+            openDay(d.format("YYYY-MM-DD"));
           }}
           slots={{ day: ExpenseCalendarDay }}
           slotProps={{
-            day: { expenseEntries: byDate } as never,
+            day: { expenseEntries: byDate, dailyTotals: totalsByDate } as never,
           }}
         />
       </Paper>
-      {withData.length > 0 && (
+      {daysWithSpend > 0 && (
         <Typography variant="body2" color="text.secondary">
-          {withData.length} ngày có chi tiêu trong tháng — chạm ô trên lịch để xem chi tiết (ảnh hoặc tổng tiền).
+          {daysWithSpend} ngày có chi tiêu (giao dịch) trong tháng — chạm ô để xem chi tiết.
         </Typography>
       )}
-      <Typography variant="caption" color="text.secondary">
-        Lịch chỉ hiển thị chi tiêu theo ngày (ảnh/OCR). Giao dịch thêm thủ công xem tại mục Giao dịch.
-      </Typography>
       <Drawer
         anchor="bottom"
-        open={!!selectedEntryId && !!selectedEntry}
-        onClose={() => setSelectedEntryId(null)}
+        open={!!selectedDate}
+        onClose={() => setSelectedDate(null)}
         slotProps={{
           paper: {
             sx: {
@@ -136,8 +170,14 @@ export default function ExpenseCalendarPage() {
           },
         }}
       >
-        {selectedEntry && (
-          <EntryDetail entry={selectedEntry} onClose={() => setSelectedEntryId(null)} />
+        {selectedDate && (
+          <DayDetail
+            date={selectedDate}
+            imageUrl={byDate.get(selectedDate)?.imageUrl}
+            transactions={dayTx?.items ?? []}
+            total={selectedTotal}
+            onClose={() => setSelectedDate(null)}
+          />
         )}
       </Drawer>
     </Stack>

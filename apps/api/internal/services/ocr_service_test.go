@@ -8,6 +8,5 @@ import (
 
 func TestMockOCRResult(t *testing.T) {
 	r := mockOCRResult()
-	assert.NotEmpty(t, r.Items)
-	assert.NotEmpty(t, r.Items[0].Amount)
+	assert.Empty(t, r.Items)
 }

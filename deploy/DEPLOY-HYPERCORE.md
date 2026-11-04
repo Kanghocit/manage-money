@@ -53,7 +53,7 @@ API_PORT=8081
 JWT_ACCESS_SECRET=<random-32+>
 JWT_REFRESH_SECRET=<random-32+>
 JWT_ACCESS_TTL=15m
-JWT_REFRESH_TTL=168h
+JWT_REFRESH_TTL=720h
 
 COOKIE_SECURE=true
 CORS_ORIGINS=https://money.ankhang.name.vn
@@ -135,7 +135,8 @@ manage-tool vẫn chỉ `manage-tool-api` trên `:4000`.
 ## 8. Checklist lỗi thường gặp
 
 - **502** → `pm2 logs money-api` / `money-web`; port 8081/3001 có listen không.
-- **Login không giữ session** → `COOKIE_SECURE=true` bắt buộc HTTPS; `NEXT_PUBLIC_API_URL=/api/v1`.
+- **Login không giữ session** → `COOKIE_SECURE=true` bắt buộc HTTPS; `NEXT_PUBLIC_API_URL=/api/v1`; `JWT_REFRESH_TTL=720h` (web tự gọi `/auth/refresh` khi access hết hạn).
+- **Chi tiêu cũ chỉ có expense-day chưa xác nhận** → mở Daily, nhập lại và **Lưu** (hoặc gọi lại `POST .../confirm`) để đồng bộ sang bảng `transactions`.
 - **OCR không chạy** → `money-worker` online + `REDIS_URL` + `OPENAI_API_KEY` (hoặc mock).
 - **Ảnh hóa đơn mất sau reboot** → backup thư mục `uploads/`.
 
